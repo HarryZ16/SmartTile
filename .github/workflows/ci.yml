@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Unit tests
+        run: swift test
+
+      - name: Build and package SmartTile.app
+        run: ./build.sh --adhoc
+
+      - name: Zip app
+        run: ditto -c -k --keepParent build/SmartTile.app SmartTile.zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartTile
+          path: SmartTile.zip

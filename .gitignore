@@ -1,0 +1,16 @@
+# SwiftPM / Xcode
+.build/
+.swiftpm/
+*.xcodeproj
+xcuserdata/
+DerivedData/
+
+# build.sh output
+build/
+*.zip
+
+# macOS
+.DS_Store
+
+# Python (scripts/generate_icon.py)
+__pycache__/
