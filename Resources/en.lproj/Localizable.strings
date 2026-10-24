@@ -3,6 +3,7 @@
 "⚠️ Accessibility access not granted. Click to open Settings" = "⚠️ Accessibility access not granted. Click to open Settings";
 "Arrange Windows Now" = "Arrange Windows Now";
 "Undo Last Arrangement" = "Undo Last Arrangement";
+"%d windows you moved stay put. ⌃⌥L re-arranges them" = "%d windows you moved stay put. ⌃⌥L re-arranges them";
 "Window Switcher" = "Window Switcher";
 "Main Area" = "Main Area";
 "Reference Area" = "Reference Area";
@@ -18,6 +19,7 @@
 "Main screen now follows usage time" = "Main screen now follows usage time";
 "Main Screen (for code)" = "Main Screen (for code)";
 "Auto-place New Windows" = "Auto-place New Windows";
+"Keep Extra Windows Next to Their App" = "Keep Extra Windows Next to Their App";
 "Re-arrange When Displays Change" = "Re-arrange When Displays Change";
 "Learn from Manual Adjustments" = "Learn from Manual Adjustments";
 "Launch at Login" = "Launch at Login";
@@ -63,6 +65,7 @@
 "Arranged %d windows" = "Arranged %d windows";
 "Nothing to undo" = "Nothing to undo";
 "Undone (%d windows)" = "Undone (%d windows)";
+"Keeping “%@” where you put it. ⌃⌥L re-arranges it" = "Keeping “%@” where you put it. ⌃⌥L re-arranges it";
 "Split set to %d%% : %d%% (⌃⌥Z to undo)" = "Split set to %d%% : %d%% (⌃⌥Z to undo)";
 "Main screen is now screen %d. Press ⌃⌥L to re-arrange" = "Main screen is now screen %d. Press ⌃⌥L to re-arrange";
 "Learned: “%@” now goes to the %@ area" = "Learned: “%@” now goes to the %@ area";

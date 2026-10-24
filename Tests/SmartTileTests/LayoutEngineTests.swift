@@ -187,3 +187,51 @@ final class LayoutEngineTests: XCTestCase {
         XCTAssertTrue(main.rect.contains(CGPoint(x: 100, y: 500)))
     }
 }
+
+/// Which window of an app is arranged when extra windows float next to their app.
+final class WindowGroupingTests: XCTestCase {
+    typealias Item = WindowGrouping.Item
+
+    func testOldestWindowIsPrimary() {
+        // WeChat main window (id 10) and an image viewer it opened later (id 42)
+        let p = WindowGrouping.primaries([
+            Item(id: 42, key: "wechat", placed: false, floating: false),
+            Item(id: 10, key: "wechat", placed: false, floating: false),
+        ])
+        XCTAssertEqual(p["wechat"], 10)
+    }
+
+    func testPlacedWindowWinsOverOlderOne() {
+        let p = WindowGrouping.primaries([
+            Item(id: 5, key: "chrome", placed: false, floating: false),
+            Item(id: 9, key: "chrome", placed: true, floating: false),
+        ])
+        XCTAssertEqual(p["chrome"], 9)
+    }
+
+    func testFloatingWindowIsNotPrimaryWhileItsParentExists() {
+        let p = WindowGrouping.primaries([
+            Item(id: 3, key: "wechat", placed: false, floating: true),
+            Item(id: 7, key: "wechat", placed: false, floating: false),
+        ])
+        XCTAssertEqual(p["wechat"], 7)
+    }
+
+    func testFloatingWindowBecomesPrimaryWhenParentIsGone() {
+        let p = WindowGrouping.primaries([
+            Item(id: 12, key: "chrome", placed: false, floating: true),
+            Item(id: 8, key: "chrome", placed: false, floating: true),
+        ])
+        XCTAssertEqual(p["chrome"], 8)
+    }
+
+    func testDifferentKeysAreIndependent() {
+        // A title-identified window ("chrome#LeetCode") is arranged separately
+        let p = WindowGrouping.primaries([
+            Item(id: 1, key: "chrome", placed: true, floating: false),
+            Item(id: 2, key: "chrome#LeetCode", placed: false, floating: false),
+            Item(id: 3, key: "chrome", placed: false, floating: false),
+        ])
+        XCTAssertEqual(p, ["chrome": 1, "chrome#LeetCode": 2])
+    }
+}

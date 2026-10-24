@@ -48,11 +48,14 @@ struct Config: Codable {
     var autoLayoutOnScreenChange: Bool
     var learnFromManualMoves: Bool
     var autoSwitchScene: Bool
+    /// Extra windows of an app (same identity as one already arranged) are left where the
+    /// app opens them instead of being arranged.
+    var floatExtraWindows: Bool
     var mainScreenIndex: Int?
 
     enum CodingKeys: String, CodingKey {
         case appRoles, titleRules, gap, singleScreenMainRatio, autoPlaceNewWindows,
-             autoLayoutOnScreenChange, learnFromManualMoves, autoSwitchScene, mainScreenIndex
+             autoLayoutOnScreenChange, learnFromManualMoves, autoSwitchScene, floatExtraWindows, mainScreenIndex
     }
 
     static let defaults = Config(
@@ -127,6 +130,7 @@ struct Config: Codable {
         autoLayoutOnScreenChange: true,
         learnFromManualMoves: true,
         autoSwitchScene: true,
+        floatExtraWindows: true,
         mainScreenIndex: nil
     )
 }
@@ -145,6 +149,7 @@ extension Config {
         autoLayoutOnScreenChange = try c.decodeIfPresent(Bool.self, forKey: .autoLayoutOnScreenChange) ?? d.autoLayoutOnScreenChange
         learnFromManualMoves = try c.decodeIfPresent(Bool.self, forKey: .learnFromManualMoves) ?? d.learnFromManualMoves
         autoSwitchScene = try c.decodeIfPresent(Bool.self, forKey: .autoSwitchScene) ?? d.autoSwitchScene
+        floatExtraWindows = try c.decodeIfPresent(Bool.self, forKey: .floatExtraWindows) ?? d.floatExtraWindows
         mainScreenIndex = try c.decodeIfPresent(Int.self, forKey: .mainScreenIndex)
     }
 }

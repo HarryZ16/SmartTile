@@ -71,7 +71,7 @@ Browser windows are also classified by title. For example, YouTube goes to aux a
 | 2 | Main on the main screen; reference left and aux right on the other |
 | 3+ | Main on the main screen, reference on the screen to its left, aux and extra reference windows on the screen to its right |
 
-Windows that don't fit stack on the same slot with exactly the same size. Use ⌃⌥Space to switch between them.
+Windows that don't fit stack on the same slot with exactly the same size. Use ⌃⌥Space to switch between them. Extra windows of the same app are left alone (see below).
 
 ## What it learns
 
@@ -84,6 +84,14 @@ Windows that don't fit stack on the same slot with exactly the same size. Use �
 | use some windows more recently than others | which windows get the visible slots |
 
 Only mouse adjustments are learned. Apps resizing their own windows are ignored, and dragging an outer screen edge isn't learned.
+
+### Windows you place by hand stay put
+
+When you move or resize a window with the mouse, SmartTile leaves it where you put it. Automatic arranging (new windows, split changes) skips it until you arrange explicitly: ⌃⌥L, picking a scene, or a display change. The menu shows how many windows are being kept.
+
+### Extra windows of the same app
+
+Only one window per app is arranged. Other windows the app opens, such as an image viewer opened from a chat app or a second browser window, stay where the app puts them, next to their parent. If one opens on a different display than its parent, it is moved next to the parent. Windows identified by title count as separate apps and are arranged on their own. To arrange every window again, turn off **Keep Extra Windows Next to Their App**.
 
 Data lives in `~/Library/Application Support/SmartTile/`:
 

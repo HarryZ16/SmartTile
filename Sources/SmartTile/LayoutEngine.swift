@@ -283,3 +283,37 @@ private struct Builder {
         }
     }
 }
+
+// MARK: - Window grouping
+
+/// Decides which window of each identity (key) takes part in the layout when extra windows
+/// of an app are left floating. Pure function, unit tested.
+enum WindowGrouping {
+    struct Item {
+        let id: CGWindowID
+        let key: String
+        /// Already placed by SmartTile
+        let placed: Bool
+        /// Currently treated as a floating companion window
+        let floating: Bool
+    }
+
+    /// The primary window id for each key: prefer a window that isn't floating, then one that
+    /// was already placed, then the oldest (window ids grow over time, so the lowest id is the
+    /// window that was opened first, e.g. the main WeChat window rather than an image viewer).
+    /// If every window of a key is floating (its main window was closed), the oldest floating
+    /// one becomes the primary again.
+    static func primaries(_ items: [Item]) -> [String: CGWindowID] {
+        func better(_ a: Item, than b: Item) -> Bool {
+            if a.floating != b.floating { return !a.floating }
+            if a.placed != b.placed { return a.placed }
+            return a.id < b.id
+        }
+        var best: [String: Item] = [:]
+        for item in items {
+            if let current = best[item.key], !better(item, than: current) { continue }
+            best[item.key] = item
+        }
+        return best.mapValues { $0.id }
+    }
+}

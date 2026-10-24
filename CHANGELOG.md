@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 (2026-10)
+
+- Windows you move or resize by hand are no longer snapped back. Automatic arranging skips
+  them until you arrange explicitly (⌃⌥L, picking a scene, display change).
+- Extra windows of an app (e.g. an image opened from a chat app) stay next to their app
+  instead of being arranged. Toggle: "Keep Extra Windows Next to Their App".
+- Split learning only reacts to a real divider drag (exactly one shared edge moved), so
+  moving a window to another display no longer changes splits.
+- When a split changes, the dragged window stays as you left it; only its neighbors move.
+
 ## 0.1.0 (2026-10)
 
 First public release.

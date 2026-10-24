@@ -81,6 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         undoItem.isEnabled = controller.canUndo
         menu.addItem(undoItem)
+        if controller.heldCount > 0 {
+            let info = NSMenuItem(title: L("%d windows you moved stay put. ⌃⌥L re-arranges them", controller.heldCount),
+                                  action: nil, keyEquivalent: "")
+            info.isEnabled = false
+            menu.addItem(info)
+        }
         menu.addItem(ActionItem(L("Window Switcher"), key: " ", modifiers: ctrlOpt) { [weak self] in
             DispatchQueue.main.async { self?.controller.showSwitcher() }
         })
@@ -131,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(toggle(L("Auto-place New Windows"), cfg.autoPlaceNewWindows) { $0.autoPlaceNewWindows.toggle() })
+        menu.addItem(toggle(L("Keep Extra Windows Next to Their App"), cfg.floatExtraWindows) { $0.floatExtraWindows.toggle() })
         menu.addItem(toggle(L("Re-arrange When Displays Change"), cfg.autoLayoutOnScreenChange) { $0.autoLayoutOnScreenChange.toggle() })
         menu.addItem(toggle(L("Learn from Manual Adjustments"), cfg.learnFromManualMoves) { $0.learnFromManualMoves.toggle() })
         let login = ActionItem(L("Launch at Login")) { [weak self] in self?.toggleLoginItem() }

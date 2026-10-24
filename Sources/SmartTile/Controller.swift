@@ -23,12 +23,19 @@ final class Controller {
     private var undoStack: [UndoEntry] = []
     /// After a scene is picked manually, don't auto-switch until the window set changes
     private var manualSceneLock: Set<String>?
+    /// Windows the user moved or resized by hand. Automatic arranging leaves them where they
+    /// are until the user explicitly arranges again (⌃⌥L, picking a scene, display change).
+    private var held = Set<CGWindowID>()
+    /// Extra windows of an app (same identity as a window that is already arranged), e.g. an
+    /// image viewer opened from a chat app. They stay where the app put them.
+    private var floating = Set<CGWindowID>()
     private var timers: [Timer] = []
     private var screenWork: DispatchWorkItem?
     private var lastScreenSignature = ""
     private let myPID = getpid()
 
     var canUndo: Bool { !undoStack.isEmpty }
+    var heldCount: Int { held.count }
 
     init(store: Store) {
         self.store = store
@@ -180,6 +187,9 @@ final class Controller {
         }
         let alive = Set(windows.map { $0.id })
         suppressUntil = suppressUntil.filter { alive.contains($0.key) }
+        // Windows on other Spaces aren't listed, so only prune these sets when they grow large
+        if held.count > 300 { held.formIntersection(alive) }
+        if floating.count > 300 { floating.formIntersection(alive) }
         if lastFocused.count > 400 {
             let keep = lastFocused.sorted { $0.value > $1.value }.prefix(200)
             lastFocused = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
@@ -223,6 +233,21 @@ final class Controller {
                             sceneFrames: scene.layouts["n\(screens.count)"] ?? [:])
     }
 
+    /// Windows that take part in the layout. With "Keep Extra Windows Next to Their App" on,
+    /// only one window per identity is arranged; the others stay where their app put them.
+    private func layoutCandidates(_ wins: [ManagedWindow]) -> [ManagedWindow] {
+        guard store.config.floatExtraWindows else { return wins }
+        let items = wins.map {
+            WindowGrouping.Item(id: $0.id, key: $0.key, placed: placedSlots[$0.id] != nil,
+                                floating: floating.contains($0.id))
+        }
+        let primary = Set(WindowGrouping.primaries(items).values)
+        for w in wins {
+            if primary.contains(w.id) { floating.remove(w.id) } else { floating.insert(w.id) }
+        }
+        return wins.filter { primary.contains($0.id) }
+    }
+
     private func plan(_ wins: [ManagedWindow], screens: [ScreenInfo]) -> LayoutResult {
         let items = wins.map { LayoutItem(id: $0.id, bundleID: $0.bundleID, key: $0.key, role: $0.role) }
         return LayoutEngine.plan(items, screens: screens, params: layoutParams(screens))
@@ -230,18 +255,27 @@ final class Controller {
 
     // MARK: - Arranging
 
+    /// ⌃⌥L: arrange everything, including windows the user moved by hand.
     func layoutAll() {
-        relayout(autoScene: true, ratioUndo: nil, message: nil)
+        relayout(autoScene: true, ratioUndo: nil, message: nil, releaseHeld: true)
     }
 
-    private func relayout(autoScene: Bool, ratioUndo: (sceneID: String, key: String, old: Double?)?, message: String?) {
+    /// - releaseHeld: true for explicit user actions; false for automatic ones, which leave
+    ///   hand-placed windows where they are.
+    private func relayout(autoScene: Bool, ratioUndo: (sceneID: String, key: String, old: Double?)?,
+                          message: String?, releaseHeld: Bool) {
         guard ensureTrusted() else { return }
+        if releaseHeld { held.removeAll() }
         let wins = refreshWindows()
         var switchedTo: String?
         if autoScene { switchedTo = autoSelectScene(wins) }
         let screens = Geometry.screens()
         guard !screens.isEmpty else { return }
-        let moved = apply(plan(wins, screens: screens), to: wins, only: nil, ratioUndo: ratioUndo)
+        let candidates = layoutCandidates(wins)
+        // Held windows still occupy their slot in the plan, so the others don't move into it,
+        // but they are not moved themselves.
+        let moved = apply(plan(candidates, screens: screens), to: candidates, only: nil, skip: held,
+                          ratioUndo: ratioUndo)
         store.habits.layoutsApplied += 1
         if let message = message {
             onStatus?(message)
@@ -252,22 +286,63 @@ final class Controller {
         }
     }
 
-    /// Places only newly appeared windows, leaving the others alone.
+    /// Places only newly appeared windows, leaving the others alone. A new window of an app
+    /// that already has a window of the same identity (e.g. an image opened from WeChat) is a
+    /// companion: it stays where the app put it, next to its parent.
     private func placeNewWindows(_ ids: [CGWindowID]) {
         guard !ids.isEmpty, AX.isTrusted(prompt: false) else { return }
         let wins = refreshWindows()
-        let alive = Set(wins.map { $0.id })
-        let targets = Set(ids).filter { alive.contains($0) && placedSlots[$0] == nil }
+        let byID = Dictionary(uniqueKeysWithValues: wins.map { ($0.id, $0) })
+        let newIDs = Set(ids)
+        // Identities that already have a window on screen
+        var claimed = Set(wins.filter { !newIDs.contains($0.id) && !floating.contains($0.id) && $0.role != .ignore }
+                              .map { $0.key })
+        var targets = Set<CGWindowID>()
+        for id in ids.sorted() {   // oldest first
+            guard let w = byID[id], placedSlots[id] == nil, !floating.contains(id), w.role != .ignore else { continue }
+            if store.config.floatExtraWindows && claimed.contains(w.key) {
+                floating.insert(id)
+                if let parent = wins.first(where: { $0.key == w.key && $0.id != id && !floating.contains($0.id) }) {
+                    keepBeside(w, parent: parent)
+                }
+                continue
+            }
+            claimed.insert(w.key)
+            targets.insert(id)
+        }
         guard !targets.isEmpty else { return }
         let screens = Geometry.screens()
         guard !screens.isEmpty else { return }
-        apply(plan(wins, screens: screens), to: wins, only: targets, ratioUndo: nil)
+        let candidates = layoutCandidates(wins)
+        apply(plan(candidates, screens: screens), to: candidates, only: targets, skip: held, ratioUndo: nil)
+    }
+
+    /// A companion window that opened on a different display than its parent is moved next
+    /// to the parent, keeping its size. Otherwise it stays exactly where the app put it.
+    private func keepBeside(_ w: ManagedWindow, parent: ManagedWindow) {
+        let screens = Geometry.screens()
+        guard screens.count > 1 else { return }
+        let ps = Geometry.screenIndex(of: parent.frame, in: screens)
+        guard Geometry.screenIndex(of: w.frame, in: screens) != ps else { return }
+        let v = screens[ps].visible
+        let gap = CGFloat(max(0, store.config.gap))
+        let width = min(w.frame.width, v.width)
+        let height = min(w.frame.height, v.height)
+        var x = parent.frame.maxX + gap
+        if x + width > v.maxX { x = parent.frame.minX - gap - width }
+        if x < v.minX { x = parent.frame.midX - width / 2 }
+        x = min(max(x, v.minX), v.maxX - width)
+        let y = min(max(parent.frame.minY, v.minY), v.maxY - height)
+        suppressUntil[w.id] = Date().addingTimeInterval(1.5)
+        AX.setFrame(w, to: CGRect(x: x, y: y, width: width, height: height))
     }
 
     @discardableResult
     private func apply(_ result: LayoutResult, to wins: [ManagedWindow], only: Set<CGWindowID>?,
-                       ratioUndo: (sceneID: String, key: String, old: Double?)?) -> Int {
-        let inScope = wins.filter { result.slots[$0.id] != nil && (only?.contains($0.id) ?? true) }
+                       skip: Set<CGWindowID>, ratioUndo: (sceneID: String, key: String, old: Double?)?) -> Int {
+        let inScope = wins.filter {
+            result.slots[$0.id] != nil && (only?.contains($0.id) ?? true) && !skip.contains($0.id)
+        }
         let targets = inScope.filter { !$0.frame.isClose(to: result.slots[$0.id]!.frame, tol: 2) }
 
         if !targets.isEmpty || ratioUndo != nil {
@@ -320,36 +395,42 @@ final class Controller {
     }
 
     private func handleManualChange(_ id: CGWindowID) {
-        guard store.config.learnFromManualMoves, userIsDragging() else { return }
+        guard userIsDragging() else { return }
         guard let w = refreshWindows().first(where: { $0.id == id }), w.role != .ignore else { return }
+
+        // Leave the window where the user put it: automatic arranging skips it until ⌃⌥L.
+        if held.insert(id).inserted {
+            onStatus?(L("Keeping “%@” where you put it. ⌃⌥L re-arranges it", w.appName))
+        }
+        // Companion windows float freely; there is nothing to learn from them.
+        if floating.contains(id) { return }
+        guard store.config.learnFromManualMoves else { return }
         guard let slot = placedSlots[id] else {
             learnFromMove(w)
             return
         }
+
         let f = w.frame
         let s = slot.frame
-        let resized = abs(f.width - s.width) > 16 || abs(f.height - s.height) > 16
-        if resized {
-            // Find the divider that was dragged
-            var best: (boundary: Boundary, position: CGFloat, delta: CGFloat)?
-            for (edge, boundary) in slot.edges {
-                let before: CGFloat
-                let after: CGFloat
-                switch edge {
-                case .left: before = s.minX; after = f.minX
-                case .right: before = s.maxX; after = f.maxX
-                case .top: before = s.minY; after = f.minY
-                case .bottom: before = s.maxY; after = f.maxY
-                }
-                let delta = abs(after - before)
-                if delta > 16 && delta > (best?.delta ?? 0) {
-                    best = (boundary: boundary, position: after, delta: delta)
-                }
+        let moved: [Edge: CGFloat] = [
+            .left: f.minX - s.minX, .right: f.maxX - s.maxX,
+            .top: f.minY - s.minY, .bottom: f.maxY - s.maxY,
+        ]
+        let changed = moved.filter { abs($0.value) > 16 }
+        let still = moved.filter { abs($0.value) <= 8 }
+        // A divider drag moves exactly one edge, and that edge is shared with a neighbor.
+        // Anything else (moving the window, macOS shrinking it on another display, dragging
+        // an outer edge) is not a split change.
+        if changed.count == 1, still.count == 3, let edge = changed.keys.first,
+           let boundary = slot.edges[edge] {
+            let position: CGFloat
+            switch edge {
+            case .left: position = f.minX
+            case .right: position = f.maxX
+            case .top: position = f.minY
+            case .bottom: position = f.maxY
             }
-            if let b = best {
-                adjustRatio(b.boundary, edgePosition: b.position)
-            }
-            // An outer edge was dragged: nothing to learn; the next arrangement restores it
+            adjustRatio(boundary, edgePosition: position)
             return
         }
         if hypot(f.midX - s.midX, f.midY - s.midY) > 60 {
@@ -357,8 +438,8 @@ final class Controller {
         }
     }
 
-    /// The user dragged the divider between two areas: remember the new split and move
-    /// the neighbors right away.
+    /// The user dragged the divider between two areas: remember the new split and move the
+    /// neighbors right away. The dragged window itself is held, so it stays as the user left it.
     private func adjustRatio(_ boundary: Boundary, edgePosition: CGFloat) {
         let gap = CGFloat(max(0, store.config.gap))
         let r = LayoutEngine.ratio(for: boundary, edgePosition: edgePosition, gap: gap)
@@ -368,7 +449,7 @@ final class Controller {
         store.habits.ratioAdjustments += 1
         let pct = Int((r * 100).rounded())
         relayout(autoScene: false, ratioUndo: (scene.id, boundary.id, old),
-                 message: L("Split set to %d%% : %d%% (⌃⌥Z to undo)", pct, 100 - pct))
+                 message: L("Split set to %d%% : %d%% (⌃⌥Z to undo)", pct, 100 - pct), releaseHeld: false)
     }
 
     /// The user dragged a window into another area: two times in a row and it belongs there.
@@ -442,7 +523,8 @@ final class Controller {
         store.setActiveScene(id)
         manualSceneLock = signatureKeys(refreshWindows())
         placedSlots.removeAll()
-        relayout(autoScene: false, ratioUndo: nil, message: L("Switched to scene “%@”", store.activeScene.displayName))
+        relayout(autoScene: false, ratioUndo: nil, message: L("Switched to scene “%@”", store.activeScene.displayName),
+                 releaseHeld: true)
     }
 
     /// ⌃⌥N: switch to the next scene.
@@ -463,12 +545,14 @@ final class Controller {
         guard !screens.isEmpty else { return }
         let wins = refreshWindows()
         var frames: [String: Placement] = [:]
-        for w in wins where w.role != .ignore && frames[w.key] == nil {
+        // Only arranged windows are saved; companion windows keep floating next to their app
+        for w in layoutCandidates(wins) where w.role != .ignore && frames[w.key] == nil {
             let idx = Geometry.screenIndex(of: w.frame, in: screens)
             let r = Geometry.normalize(w.frame, in: screens[idx].visible)
             frames[w.key] = Placement(screen: idx, x: Double(r.minX), y: Double(r.minY),
                                       w: Double(r.width), h: Double(r.height))
             placedSlots[w.id] = Slot(frame: w.frame, edges: [:], role: w.role, screen: idx)
+            held.remove(w.id)
         }
         let signature = Array(signatureKeys(wins)).sorted()
         store.updateActiveScene { scene in
@@ -494,13 +578,15 @@ final class Controller {
             scene.signature = []
             scene.ratios = [:]
         }
-        relayout(autoScene: false, ratioUndo: nil, message: L("Cleared scene “%@”; back to the template layout", store.activeScene.displayName))
+        relayout(autoScene: false, ratioUndo: nil,
+                 message: L("Cleared scene “%@”; back to the template layout", store.activeScene.displayName),
+                 releaseHeld: true)
     }
 
     func deleteActiveScene() {
         let name = store.activeScene.displayName
         store.deleteScene(id: store.sceneBook.activeID)
-        relayout(autoScene: false, ratioUndo: nil, message: L("Deleted scene “%@”", name))
+        relayout(autoScene: false, ratioUndo: nil, message: L("Deleted scene “%@”", name), releaseHeld: true)
     }
 
     // MARK: - Usage time

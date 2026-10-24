@@ -3,6 +3,7 @@
 "⚠️ Accessibility access not granted. Click to open Settings" = "⚠️ 未授予辅助功能权限，点此打开设置";
 "Arrange Windows Now" = "立即智能分屏";
 "Undo Last Arrangement" = "撤销上一次分屏";
+"%d windows you moved stay put. ⌃⌥L re-arranges them" = "你手动摆放的 %d 个窗口保持不动，按 ⌃⌥L 重新整理";
 "Window Switcher" = "窗口切换器";
 "Main Area" = "主工作区";
 "Reference Area" = "参考区";
@@ -18,6 +19,7 @@
 "Main screen now follows usage time" = "已恢复按使用时长判断主屏";
 "Main Screen (for code)" = "主屏（放代码的屏幕）";
 "Auto-place New Windows" = "新窗口自动归位";
+"Keep Extra Windows Next to Their App" = "同一应用的其他窗口留在旁边（不参与分屏）";
 "Re-arrange When Displays Change" = "插拔显示器时自动分屏";
 "Learn from Manual Adjustments" = "从手动调整中学习";
 "Launch at Login" = "开机自动启动";
@@ -63,6 +65,7 @@
 "Arranged %d windows" = "已整理 %d 个窗口";
 "Nothing to undo" = "没有可以撤销的操作";
 "Undone (%d windows)" = "已撤销（%d 个窗口）";
+"Keeping “%@” where you put it. ⌃⌥L re-arranges it" = "已保留「%@」的位置，按 ⌃⌥L 重新整理";
 "Split set to %d%% : %d%% (⌃⌥Z to undo)" = "比例已调整为 %d%% : %d%%（⌃⌥Z 撤销）";
 "Main screen is now screen %d. Press ⌃⌥L to re-arrange" = "主屏改为屏幕 %d，按 ⌃⌥L 重新分屏";
 "Learned: “%@” now goes to the %@ area" = "记住了：「%@」以后放%@区";
